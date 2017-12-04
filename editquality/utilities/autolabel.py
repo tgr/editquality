@@ -247,6 +247,7 @@ def check_reverted_status(session, rev_id, page_id,
 
                 # self-reverts
                 self_revert = \
+                    'user' in reverted_doc and 'user' in reverted.reverting and \
                     reverted_doc['user'] == reverted.reverting['user']
                 # revisions that are reverted back to by others
                 reverted_back_to = \
