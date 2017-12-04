@@ -3191,6 +3191,63 @@ sqwiki_models: \
 	models/sqwiki.damaging.gradient_boosting.model \
 	models/sqwiki.goodfaith.gradient_boosting.model
 
+############################ Simple (English) Wikipedia #######################
+
+
+datasets/simplewiki.sampled_revisions.20k_2017.json:
+	wget -qO- https://quarry.wmflabs.org/run/219707/output/0/json-lines?download=true > $@
+
+datasets/simplewiki.autolabeled_revisions.20k_2017.json: \
+		datasets/simplewiki.sampled_revisions.20k_2017.json
+	cat $< | \
+	./utility autolabel --host=https://simple.wikipedia.org \
+		--trusted-groups=sysop,bot,rollbacker,checkuser,bureaucrat,patroller \
+		--trusted-edits=1000 \
+		--verbose > $@
+
+datasets/simplewiki.labeled_revisions.w_cache.20k_2017.json: \
+		datasets/simplewiki.labeled_revisions.20k_2017.json
+	cat $< | \
+	revscoring extract \
+		editquality.feature_lists.simplewiki.reverted \
+		editquality.feature_lists.simplewiki.damaging \
+		editquality.feature_lists.simplewiki.goodfaith \
+		--host https://simplewiki.wikipedia.org \
+		--extractor $(max_extractors) \
+		--verbose > $@
+
+tuning_reports/simplewiki.reverted.md: \
+		datasets/simplewiki.autolabeled_revisions.w_cache.20k_2017.json
+	cat $< | \
+	revscoring tune \
+		config/classifiers.params.yaml \
+		editquality.feature_lists.simplewiki.reverted \
+		reverted_for_damage \
+		roc_auc.labels.true \
+		--label-weight "true=$(reverted_weight)" \
+		--pop-rate "true=" \
+		--pop-rate "false=" \
+		--center --scale \
+		--cv-timeout=60 \
+		--debug > $@
+
+models/simplewiki.reverted.gradient_boosting.model: \
+		datasets/simplewiki.labeled_revisions.w_cache.20k_2017.json
+	cat $< | \
+	revscoring cv_train \
+		revscoring.scoring.models.GradientBoosting \
+		editquality.feature_lists.simplewiki.reverted \
+		reverted_for_damage \
+		--version=$(reverted_major_minor).0 \
+		-p 'max_depth=7' \
+		-p 'learning_rate=0.01' \
+		-p 'max_features="log2"' \
+		-p 'n_estimators=500' \
+		--label-weight "true=$(reverted_weight)" \
+		--pop-rate "true=" \
+		--pop-rate "false=" \
+		--center --scale > $@
+
 ################################# Swedish Wikipedia ###########################
 
 datasets/svwiki.sampled_revisions.40k_2016.json:
