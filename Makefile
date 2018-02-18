@@ -638,7 +638,7 @@ tuning_reports/huwiki.reverted.md: \
 		--pop-rate "true=0.014812583163867339" \
 		--pop-rate "false=0.9851874168361326" \
 		--center --scale \
-		--cv-timeout=60 \
+		--cv-timeout 60 \
 		--debug > $@
 
 models/huwiki.reverted.rf.model: \
@@ -658,6 +658,10 @@ models/huwiki.reverted.rf.model: \
 		--pop-rate "false=0.9851874168361326" \
 		--center --scale > $@
 
+datasets/huwiki.human_labeled_revisions.5k_2016.json:
+	./utility fetch_labels \
+		http://labels.wmflabs.org/campaigns/huwiki/33/ > $@
+
 datasets/huwiki.revisions_for_review.5k_2016.json: \
 		datasets/huwiki.autolabeled_revisions.40k_2016.json
 	( \
@@ -669,11 +673,87 @@ datasets/huwiki.revisions_for_review.5k_2016.json: \
     shuf -n 2500 \
 	 ) | shuf > $@
 
+datasets/huwiki.labeled_revisions.40k_2016.json: \
+		datasets/huwiki.human_labeled_revisions.5k_2016.json \
+		datasets/huwiki.autolabeled_revisions.40k_2016.json
+	./utility merge_labels $^ > $@
+
+datasets/huwiki.labeled_revisions.w_cache.40k_2016.json: \
+		datasets/huwiki.labeled_revisions.40k_2016.json
+	cat $< | \
+	revscoring extract \
+		editquality.feature_lists.huwiki.damaging \
+		editquality.feature_lists.huwiki.goodfaith \
+		--host https://hu.wikipedia.org \
+		--extractor $(max_extractors) \
+		--verbose > $@
+
+tuning_reports/huwiki.damaging.md: \
+		datasets/huwiki.labeled_revisions.w_cache.40k_2016.json
+	cat $< | \
+	revscoring tune \
+		config/classifiers.params.yaml \
+		editquality.feature_lists.huwiki.damaging \
+		damaging \
+		roc_auc.labels.true \
+		--label-weight "true=$(damaging_weight)" \
+		--center --scale \
+		--cv-timeout 60 \
+		--debug > $@
+
+models/huwiki.damaging.gradient_boosting.model: \
+		datasets/huwiki.labeled_revisions.w_cache.40k_2016.json
+	cat $< | \
+	revscoring cv_train \
+		revscoring.scorer_models.GradientBoosting \
+		editquality.feature_lists.huwiki.damaging \
+		damaging \
+		--version=$(damaging_major_minor).0 \
+		-p 'learning_rate=0.01' \
+		-p 'max_depth=7' \
+		-p 'max_features="log2"' \
+		-p 'n_estimators=300' \
+		--label-weight "true=$(damaging_weight)" \
+		--center --scale > $@
+
+tuning_reports/huwiki.goodfaith.md: \
+		datasets/huwiki.labeled_revisions.w_cache.40k_2016.json
+	cat $< | \
+	revscoring tune \
+		config/classifiers.params.yaml \
+		editquality.feature_lists.huwiki.goodfaith \
+		goodfaith \
+		roc_auc.labels.true \
+		--label-weight "false=$(goodfaith_weight)" \
+		--center --scale \
+		--cv-timeout 60 \
+		--debug > $@
+
+models/huwiki.goodfaith.gradient_boosting.model: \
+		datasets/huwiki.labeled_revisions.w_cache.40k_2016.json
+	cat $< | \
+	revscoring cv_train \
+		revscoring.scorer_models.GradientBoosting \
+		editquality.feature_lists.huwiki.goodfaith \
+		goodfaith \
+		--version=$(goodfaith_major_minor).0 \
+		-p 'learning_rate=0.01' \
+		-p 'max_depth=5' \
+		-p 'max_features="log2"' \
+		-p 'n_estimators=500' \
+		--label-weight "false=$(goodfaith_weight)" \
+		--center --scale > \
+	models/huwiki.goodfaith.gradient_boosting.model
+
 huwiki_models: \
-	models/huwiki.reverted.rf.model
+	models/huwiki.reverted.rf.model \
+	models/huwiki.damaging.rf.model \
+	models/huwiki.goodfaith.rf.model
 
 huwiki_tuning_reports: \
-	tuning_reports/huwiki.reverted.md
+	tuning_reports/huwiki.reverted.md \
+	tuning_reports/huwiki.damaging.md \
+	tuning_reports/huwiki.goodfaith.md
 
 ############################# Norwegian Wikipedia #############################
 
