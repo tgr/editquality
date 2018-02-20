@@ -1409,11 +1409,79 @@ models/huwiki.reverted.rf.model: \
 		--pop-rate "false=0.9851874168361326" \
 		--center --scale > $@
 
+tuning_reports/huwiki.damaging.md: \
+		datasets/huwiki.labeled_revisions.w_cache.40k_2016.json
+	cat $< | \
+	revscoring tune \
+		config/classifiers.params.yaml \
+		editquality.feature_lists.huwiki.damaging \
+		damaging \
+		roc_auc.labels.true \
+		--label-weight "true=$(damaging_weight)" \
+		--pop-rate "true=0.0872" \
+		--pop-rate "false=0.9128000000000001" \
+		--center --scale \
+		--cv-timeout 60 \
+		--debug > $@
+
+models/huwiki.damaging.gradient_boosting.model: \
+		datasets/huwiki.labeled_revisions.w_cache.40k_2016.json
+	cat $< | \
+	revscoring cv_train \
+		revscoring.scoring.models.GradientBoosting \
+		editquality.feature_lists.huwiki.damaging \
+		damaging \
+		--version=$(damaging_major_minor).0 \
+		-p 'learning_rate=0.01' \
+		-p 'max_depth=7' \
+		-p 'max_features=log2' \
+		-p 'n_estimators=700' \
+		--label-weight "true=$(damaging_weight)" \
+		--pop-rate "true=0.0872" \
+		--pop-rate "false=0.9128000000000001" \
+		--center --scale > $@
+
+tuning_reports/huwiki.goodfaith.md: \
+		datasets/huwiki.labeled_revisions.w_cache.40k_2016.json
+	cat $< | \
+	revscoring tune \
+		config/classifiers.params.yaml \
+		editquality.feature_lists.huwiki.goodfaith \
+		goodfaith \
+		roc_auc.labels.true \
+		--label-weight "false=$(goodfaith_weight)" \
+		--pop-rate "true=0.938" \
+		--pop-rate "false=0.062000000000000055" \
+		--center --scale \
+		--cv-timeout 60 \
+		--debug > $@
+
+models/huwiki.goodfaith.gradient_boosting.model: \
+		datasets/huwiki.labeled_revisions.w_cache.40k_2016.json
+	cat $< | \
+	revscoring cv_train \
+		revscoring.scoring.models.GradientBoosting \
+		editquality.feature_lists.huwiki.goodfaith \
+		goodfaith \
+		--version=$(goodfaith_major_minor).0 \
+		-p 'learning_rate=0.01' \
+		-p 'max_depth=7' \
+		-p 'max_features=log2' \
+		-p 'n_estimators=700' \
+		--label-weight "false=$(goodfaith_weight)" \
+		--pop-rate "true=0.938" \
+		--pop-rate "false=0.062000000000000055" \
+		--center --scale > $@
+
 huwiki_models: \
-	models/huwiki.reverted.rf.model
+	models/huwiki.reverted.rf.model \
+	models/huwiki.damaging.gradient_boosting.model \
+	models/huwiki.goodfaith.gradient_boosting.model
 
 huwiki_tuning_reports: \
-	tuning_reports/huwiki.reverted.md
+	tuning_reports/huwiki.reverted.md \
+	tuning_reports/huwiki.damaging.md \
+	tuning_reports/huwiki.goodfaith.md
 
 ############################# Indonesian Wikipedia ################################
 
